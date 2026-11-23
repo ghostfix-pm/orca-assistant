@@ -1,0 +1,14 @@
+{
+  "molecule": {
+    "atoms": [
+      {"element": "O", "x": 0.0, "y": 0.0,    "z": 0.117},
+      {"element": "H", "x": 0.0, "y": 0.757,  "z": -0.469},
+      {"element": "H", "x": 0.0, "y": -0.757, "z": -0.469}
+    ],
+    "charge": 0,
+    "multiplicity": 1
+  },
+  "task": "opt_freq",
+  "method": {"functional": "B3LYP", "basis": "def2-TZVP", "dispersion": "D3BJ", "solvent": "water"},
+  "resources": {"nprocs": 4, "maxcore_mb": 2000}
+}
