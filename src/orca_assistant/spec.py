@@ -39,6 +39,17 @@ class Atom(BaseModel):
         return v
 
 
+def atoms_from_xyz(text: str) -> list[Atom]:
+    """Parse standard XYZ (with count + comment lines) or bare atom lines."""
+    lines = [ln.split() for ln in text.strip().splitlines() if ln.strip()]
+    if lines and len(lines[0]) == 1 and lines[0][0].isdigit():
+        lines = lines[2:]  # drop atom count and comment line
+    return [
+        Atom(element=p[0], x=float(p[1]), y=float(p[2]), z=float(p[3]))
+        for p in lines
+    ]
+
+
 class Molecule(BaseModel):
     atoms: list[Atom] = Field(min_length=1)
     charge: int = 0
@@ -59,15 +70,7 @@ class Molecule(BaseModel):
 
     @classmethod
     def from_xyz(cls, text: str, charge: int = 0, multiplicity: int = 1) -> "Molecule":
-        """Parse standard XYZ (with count + comment lines) or bare atom lines."""
-        lines = [ln.split() for ln in text.strip().splitlines() if ln.strip()]
-        if lines and len(lines[0]) == 1 and lines[0][0].isdigit():
-            lines = lines[2:]  # drop atom count and comment line
-        atoms = [
-            Atom(element=p[0], x=float(p[1]), y=float(p[2]), z=float(p[3]))
-            for p in lines
-        ]
-        return cls(atoms=atoms, charge=charge, multiplicity=multiplicity)
+        return cls(atoms=atoms_from_xyz(text), charge=charge, multiplicity=multiplicity)
 
 
 class Method(BaseModel):

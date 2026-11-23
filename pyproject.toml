@@ -1,12 +1,13 @@
 [project]
 name = "orca-assistant"
-version = "0.1.0"
-description = "Typed spec -> validated ORCA input files (MVP; LLM layer comes later)"
+version = "0.3.0"
+description = "Plain-language request -> validated ORCA input; run ORCA and parse results"
 requires-python = ">=3.10"
 dependencies = ["pydantic>=2.5"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+llm = ["anthropic>=0.40"]
 
 [project.scripts]
 orca-assistant = "orca_assistant.cli:main"

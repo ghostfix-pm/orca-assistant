@@ -1,51 +1,24 @@
 from __future__ import annotations
 
 import argparse
+import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 from .lint import lint
+from .parser import ParsedOutput, parse_file
 from .render import render_input
-from .spec import CalcSpec
+from .spec import CalcSpec, atoms_from_xyz
 
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="orca-assistant")
-    p.add_argument("spec", type=Path, help="JSON file with a CalcSpec")
-    p.add_argument("-o", "--output", type=Path, help="write .inp here (default: stdout)")
-    args = p.parse_args(argv)
-
-    spec = CalcSpec.model_validate_json(args.spec.read_text())
+def _print_lint(spec: CalcSpec) -> None:
     for issue in lint(spec):
         print(f"[{issue.level}] {issue.message}", file=sys.stderr)
 
-    text = render_input(spec)
-    if args.output:
-        args.output.write_text(text)
-    else:
-        sys.stdout.write(text)
-    return 0
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
-def parse_main(argv: list[str] | None = None) -> int:
-    import json
-
-    from .parser import parse_file
-
-    p = argparse.ArgumentParser(prog="orca-parse")
-    p.add_argument("output", type=Path, help="ORCA .out file")
-    p.add_argument("--json", action="store_true", help="print JSON instead of a summary")
-    args = p.parse_args(argv)
-
-    res = parse_file(args.output)
-    if args.json:
-        print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False))
-        return 0
-
+def print_summary(res: ParsedOutput) -> None:
     def fmt(v, unit=""):
         return "n/a" if v is None else f"{v:.6f}{unit}"
 
@@ -64,4 +37,99 @@ def parse_main(argv: list[str] | None = None) -> int:
         print(f"[warning] {w}")
     for pr in res.problems:
         print(f"[PROBLEM] {pr}")
+
+
+def _emit(text: str, path: Path | None) -> None:
+    if path:
+        path.write_text(text)
+        print(f"wrote {path}", file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+
+
+def cmd_render(args) -> int:
+    spec = CalcSpec.model_validate_json(args.spec.read_text())
+    _print_lint(spec)
+    _emit(render_input(spec), args.output)
+    return 0
+
+
+def cmd_ask(args) -> int:
+    from .llm import plan_calculation
+
+    atoms = atoms_from_xyz(args.xyz.read_text())
+    planned = plan_calculation(args.request, atoms, model=args.model)
+    for note in planned.assumptions:
+        print(f"[assumption] {note}", file=sys.stderr)
+    _print_lint(planned.spec)
+    if args.spec_out:
+        args.spec_out.write_text(planned.spec.model_dump_json(indent=2))
+        print(f"wrote {args.spec_out}", file=sys.stderr)
+    _emit(render_input(planned.spec), args.output)
+    return 0
+
+
+def cmd_run(args) -> int:
+    orca = shutil.which("orca")
+    if not orca:
+        print("ORCA not found in PATH.", file=sys.stderr)
+        return 2
+    inp = args.input.resolve()
+    out = inp.with_suffix(".out")
+    print(f"running {orca} {inp.name} -> {out.name}", file=sys.stderr)
+    with open(out, "w") as fh:
+        subprocess.run([orca, inp.name], cwd=inp.parent, stdout=fh, stderr=subprocess.STDOUT)
+    res = parse_file(out)
+    print_summary(res)
     return 0 if not res.problems else 1
+
+
+def cmd_parse(args) -> int:
+    res = parse_file(args.output)
+    if args.json:
+        print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False))
+        return 0
+    print_summary(res)
+    return 0 if not res.problems else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="orca-assistant")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("render", help="CalcSpec JSON -> .inp")
+    r.add_argument("spec", type=Path)
+    r.add_argument("-o", "--output", type=Path)
+    r.set_defaults(func=cmd_render)
+
+    a = sub.add_parser("ask", help='plain-language request + .xyz -> .inp (needs API key)')
+    a.add_argument("request", help='e.g. "optimise and compute frequencies, wB97X-D3, def2-TZVP, water"')
+    a.add_argument("xyz", type=Path)
+    a.add_argument("-o", "--output", type=Path)
+    a.add_argument("--spec-out", type=Path, help="also save the validated spec as JSON")
+    a.add_argument("--model")
+    a.set_defaults(func=cmd_ask)
+
+    x = sub.add_parser("run", help="run ORCA on an .inp, then parse the result")
+    x.add_argument("input", type=Path)
+    x.set_defaults(func=cmd_run)
+
+    pa = sub.add_parser("parse", help="summarise an ORCA .out file")
+    pa.add_argument("output", type=Path)
+    pa.add_argument("--json", action="store_true")
+    pa.set_defaults(func=cmd_parse)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
+
+
+def parse_main(argv: list[str] | None = None) -> int:
+    """Entry point kept for the `orca-parse` command."""
+    return main(["parse", *(argv if argv is not None else sys.argv[1:])])
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
