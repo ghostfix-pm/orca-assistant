@@ -55,10 +55,11 @@ def cmd_render(args) -> int:
 
 
 def cmd_ask(args) -> int:
-    from .llm import plan_calculation
+    from .llm import make_backend, plan_calculation
 
     atoms = atoms_from_xyz(args.xyz.read_text())
-    planned = plan_calculation(args.request, atoms, model=args.model)
+    backend = make_backend(args.backend, args.model, args.base_url, args.api_key_env)
+    planned = plan_calculation(args.request, atoms, backend=backend)
     for note in planned.assumptions:
         print(f"[assumption] {note}", file=sys.stderr)
     _print_lint(planned.spec)
@@ -102,12 +103,17 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("-o", "--output", type=Path)
     r.set_defaults(func=cmd_render)
 
-    a = sub.add_parser("ask", help='plain-language request + .xyz -> .inp (needs API key)')
+    a = sub.add_parser("ask", help="plain-language request + .xyz -> .inp")
     a.add_argument("request", help='e.g. "optimise and compute frequencies, wB97X-D3, def2-TZVP, water"')
     a.add_argument("xyz", type=Path)
     a.add_argument("-o", "--output", type=Path)
     a.add_argument("--spec-out", type=Path, help="also save the validated spec as JSON")
-    a.add_argument("--model")
+    a.add_argument("--backend", choices=["ollama", "openai", "anthropic"], default="ollama",
+                   help="ollama: local and free (default); openai: any OpenAI-compatible "
+                        "server; anthropic: Claude API")
+    a.add_argument("--model", help="model name (for ollama see `ollama list`)")
+    a.add_argument("--base-url", help="server URL for --backend openai")
+    a.add_argument("--api-key-env", help="env var holding the API key for --backend openai")
     a.set_defaults(func=cmd_ask)
 
     x = sub.add_parser("run", help="run ORCA on an .inp, then parse the result")
