@@ -40,7 +40,7 @@ def test_suggest_plenty_of_ram():
 
 def test_suggest_tight_ram_reduces_procs():
     r = suggest_resources(Hardware(cores=4, ram_mb=6835, available_mb=2662))
-    assert r.nprocs == 3
+    assert r.nprocs == 2
     assert r.nprocs * r.maxcore_mb <= 0.75 * 2662
 
 

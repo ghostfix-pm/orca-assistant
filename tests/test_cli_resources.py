@@ -11,15 +11,15 @@ def test_resources_command(monkeypatch, capsys):
     monkeypatch.setattr("orca_assistant.cli.detect_hardware", lambda: SMALL)
     assert main(["resources"]) == 0
     out = capsys.readouterr().out
-    assert "nprocs=3" in out and "maxcore=665" in out
+    assert "nprocs=2" in out and "maxcore=998" in out
 
 
 def test_render_auto_resources(monkeypatch, capsys):
     monkeypatch.setattr("orca_assistant.cli.detect_hardware", lambda: SMALL)
     assert main(["render", str(EXAMPLE), "--auto-resources"]) == 0
     cap = capsys.readouterr()
-    assert "%pal nprocs 3 end" in cap.out
-    assert "%maxcore 665" in cap.out
+    assert "%pal nprocs 2 end" in cap.out
+    assert "%maxcore 998" in cap.out
     assert "[resources]" in cap.err
 
 

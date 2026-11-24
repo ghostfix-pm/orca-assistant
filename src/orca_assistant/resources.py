@@ -12,7 +12,7 @@ from pathlib import Path
 from .spec import Resources
 
 HEADROOM = 0.75        # fraction of the memory budget handed to %maxcore
-MIN_MAXCORE_MB = 500   # below this, use fewer processes instead
+MIN_MAXCORE_MB = 900   # below this, use fewer processes instead
 MAX_MAXCORE_MB = 8000
 
 
