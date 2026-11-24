@@ -75,3 +75,12 @@ charges, optimisation cycles and the strongest IR band; `--json` includes all
 of it, with the per-cycle energies and IR intensities. `orca-assistant xyz
 file.out` writes the last geometry as `.xyz` (`--all` writes the whole
 optimisation trajectory as a multi-frame file).
+
+## Energy tables
+
+`orca-assistant table a.out b.out ... [--format md|csv|json] [--temperature K]
+[--by auto|g|e] [--sort] [-o file]` collects energies from several outputs:
+E, ZPE, H and G in Eh, relative energies in kcal/mol and Boltzmann
+populations. Relative values use the Gibbs free energy when every file has it,
+otherwise the electronic energy (with a warning). Only compare calculations
+done at the same level of theory.

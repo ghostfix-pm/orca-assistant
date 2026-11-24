@@ -13,6 +13,7 @@ from .parser import ParsedOutput, parse_file
 from .render import render_input
 from .resources import detect_hardware, suggest_resources
 from .spec import CalcSpec, atoms_from_xyz
+from .table import build_rows, render_table
 
 
 def _print_lint(spec: CalcSpec) -> None:
@@ -156,6 +157,19 @@ def cmd_xyz(args) -> int:
     return 0
 
 
+def cmd_table(args) -> int:
+    entries = [(p.stem, parse_file(p)) for p in args.files]
+    try:
+        table = build_rows(entries, args.temperature, args.by, args.sort)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for w in table.warnings:
+        print(f"[warning] {w}", file=sys.stderr)
+    _emit(render_table(table, args.format), args.output)
+    return 0
+
+
 def cmd_parse(args) -> int:
     res = parse_file(args.output)
     extras = extract(args.output.read_text(errors="replace"))
@@ -206,6 +220,18 @@ def build_parser() -> argparse.ArgumentParser:
     xy.add_argument("--all", action="store_true",
                     help="multi-frame .xyz of every geometry (optimisation trajectory)")
     xy.set_defaults(func=cmd_xyz)
+
+    t = sub.add_parser("table", help="energy table from several .out files: dE/dG in kcal/mol, "
+                                     "Boltzmann populations")
+    t.add_argument("files", nargs="+", type=Path)
+    t.add_argument("--format", choices=["md", "csv", "json"], default="md")
+    t.add_argument("-o", "--output", type=Path)
+    t.add_argument("--temperature", type=float, default=298.15, help="kelvin (default 298.15)")
+    t.add_argument("--by", choices=["auto", "g", "e"], default="auto",
+                   help="energy for relative values: g = Gibbs, e = electronic, "
+                        "auto = Gibbs when every file has it")
+    t.add_argument("--sort", action="store_true", help="most populated first")
+    t.set_defaults(func=cmd_table)
 
     pa = sub.add_parser("parse", help="summarise an ORCA .out file")
     pa.add_argument("output", type=Path)
