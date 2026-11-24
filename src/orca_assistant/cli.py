@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .extract import extract, parse_geometries, write_xyz
 from .lint import lint
 from .parser import ParsedOutput, parse_file
 from .render import render_input
@@ -38,6 +39,35 @@ def print_summary(res: ParsedOutput) -> None:
         print(f"[warning] {w}")
     for pr in res.problems:
         print(f"[PROBLEM] {pr}")
+
+
+def print_extras(ex) -> None:
+    def chg(items):
+        return ", ".join(f"{c.element}{c.index} {c.charge:+.3f}" for c in items)
+
+    if ex.orca_version:
+        print(f"ORCA version        : {ex.orca_version}")
+    for fo in ex.frontier:
+        if fo.homo_ev is None or fo.lumo_ev is None:
+            continue
+        tag = "" if fo.channel == "restricted" else f" ({fo.channel})"
+        print(f"{'HOMO/LUMO' + tag:<20}: {fo.homo_ev:.3f} / {fo.lumo_ev:.3f} eV, "
+              f"gap {fo.gap_ev:.3f} eV")
+    if ex.mulliken:
+        print(f"Mulliken charges    : {chg(ex.mulliken)}")
+    if ex.loewdin:
+        print(f"Loewdin charges     : {chg(ex.loewdin)}")
+    if ex.opt_steps:
+        jobs = len({s.job for s in ex.opt_steps})
+        first, last = ex.opt_steps[0].energy_eh, ex.opt_steps[-1].energy_eh
+        extra = f", {jobs} optimisations" if jobs > 1 else ""
+        print(f"optimisation cycles : {len(ex.opt_steps)}{extra}")
+        if first is not None and last is not None:
+            print(f"                      E first {first:.6f}, last {last:.6f} Eh")
+    if ex.ir_modes:
+        strongest = max(ex.ir_modes, key=lambda m: m.intensity_km_mol)
+        print(f"strongest IR band   : {strongest.freq_cm1:.1f} cm-1 "
+              f"({strongest.intensity_km_mol:.1f} km/mol)")
 
 
 def _emit(text: str, path: Path | None) -> None:
@@ -109,15 +139,31 @@ def cmd_run(args) -> int:
         subprocess.run([orca, inp.name], cwd=inp.parent, stdout=fh, stderr=subprocess.STDOUT)
     res = parse_file(out)
     print_summary(res)
+    print_extras(extract(out.read_text(errors="replace")))
     return 0 if not res.problems else 1
+
+
+def cmd_xyz(args) -> int:
+    geoms = parse_geometries(args.outfile.read_text(errors="replace"))
+    if not geoms:
+        print("no geometry found in the file", file=sys.stderr)
+        return 1
+    if args.all:
+        body = "".join(write_xyz(g, f"frame {i} of {len(geoms)}") for i, g in enumerate(geoms, 1))
+    else:
+        body = write_xyz(geoms[-1], f"{args.outfile.name}, last geometry")
+    _emit(body, args.xyz_out)
+    return 0
 
 
 def cmd_parse(args) -> int:
     res = parse_file(args.output)
+    extras = extract(args.output.read_text(errors="replace"))
     if args.json:
-        print(json.dumps(res.to_dict(), indent=2, ensure_ascii=False))
+        print(json.dumps({**res.to_dict(), **extras.to_dict()}, indent=2, ensure_ascii=False))
         return 0
     print_summary(res)
+    print_extras(extras)
     return 0 if not res.problems else 1
 
 
@@ -153,6 +199,13 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("run", help="run ORCA on an .inp, then parse the result")
     x.add_argument("input", type=Path)
     x.set_defaults(func=cmd_run)
+
+    xy = sub.add_parser("xyz", help="write the last (or all) geometries of an .out as .xyz")
+    xy.add_argument("outfile", type=Path)
+    xy.add_argument("-o", "--output", dest="xyz_out", type=Path)
+    xy.add_argument("--all", action="store_true",
+                    help="multi-frame .xyz of every geometry (optimisation trajectory)")
+    xy.set_defaults(func=cmd_xyz)
 
     pa = sub.add_parser("parse", help="summarise an ORCA .out file")
     pa.add_argument("output", type=Path)

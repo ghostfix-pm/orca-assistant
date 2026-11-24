@@ -66,3 +66,12 @@ safe `nprocs` / `maxcore` suggestion (`%maxcore` is per core, so the total is
 `nprocs x maxcore`). `render` and `ask` accept `--auto-resources` to apply it,
 and the linter warns when the requested `nprocs x maxcore` does not fit the
 machine. Detection uses only the standard library (Linux, macOS, Windows).
+
+## Reading outputs
+
+`orca-assistant parse file.out` now also reports the ORCA version, HOMO/LUMO
+and gap (per spin channel for open-shell systems), Mulliken and Loewdin
+charges, optimisation cycles and the strongest IR band; `--json` includes all
+of it, with the per-cycle energies and IR intensities. `orca-assistant xyz
+file.out` writes the last geometry as `.xyz` (`--all` writes the whole
+optimisation trajectory as a multi-frame file).
