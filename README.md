@@ -1,5 +1,9 @@
 # orca-assistant
 
+[![tests](https://github.com/segavr/orca-assistant/actions/workflows/tests.yml/badge.svg)](https://github.com/segavr/orca-assistant/actions/workflows/tests.yml)
+
+[![tests](https://github.com/segavr/orca-assistant/actions/workflows/tests.yml/badge.svg)](https://github.com/segavr/orca-assistant/actions/workflows/tests.yml)
+
 Typed spec -> validated ORCA input. The LLM layer (planned) only produces a
 `CalcSpec`; all ORCA syntax comes from deterministic code.
 
