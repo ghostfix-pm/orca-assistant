@@ -58,3 +58,11 @@ retry loop matter; the benchmark (roadmap) measures how often each model is righ
 5. [ ] Error diagnosis and guarded auto-restart
 6. [ ] Benchmark set of reference inputs
 7. [ ] MCP server exposing generate / lint / parse tools
+
+## Resources
+
+`orca-assistant resources` prints the detected physical cores and RAM and a
+safe `nprocs` / `maxcore` suggestion (`%maxcore` is per core, so the total is
+`nprocs x maxcore`). `render` and `ask` accept `--auto-resources` to apply it,
+and the linter warns when the requested `nprocs x maxcore` does not fit the
+machine. Detection uses only the standard library (Linux, macOS, Windows).

@@ -10,11 +10,12 @@ from pathlib import Path
 from .lint import lint
 from .parser import ParsedOutput, parse_file
 from .render import render_input
+from .resources import detect_hardware, suggest_resources
 from .spec import CalcSpec, atoms_from_xyz
 
 
 def _print_lint(spec: CalcSpec) -> None:
-    for issue in lint(spec):
+    for issue in lint(spec, detect_hardware()):
         print(f"[{issue.level}] {issue.message}", file=sys.stderr)
 
 
@@ -47,8 +48,33 @@ def _emit(text: str, path: Path | None) -> None:
         sys.stdout.write(text)
 
 
+def _auto_resources(spec: CalcSpec) -> CalcSpec:
+    res = suggest_resources(detect_hardware())
+    print(f"[resources] nprocs={res.nprocs}, maxcore={res.maxcore_mb} MB per core (auto)",
+          file=sys.stderr)
+    return spec.model_copy(update={"resources": res})
+
+
+def cmd_resources(args) -> int:
+    hw = detect_hardware()
+    sug = suggest_resources(hw)
+
+    def gib(mb):
+        return "n/a" if mb is None else f"{mb / 1024:.1f} GiB"
+
+    print(f"cores (physical)    : {hw.cores}")
+    print(f"RAM total           : {gib(hw.ram_mb)}")
+    print(f"RAM available       : {gib(hw.available_mb)}")
+    print(f"suggested           : nprocs={sug.nprocs}, maxcore={sug.maxcore_mb} MB per core")
+    print(f"                      ({sug.nprocs} x {sug.maxcore_mb} MB = "
+          f"{gib(sug.nprocs * sug.maxcore_mb)} in total)")
+    return 0
+
+
 def cmd_render(args) -> int:
     spec = CalcSpec.model_validate_json(args.spec.read_text())
+    if args.auto_resources:
+        spec = _auto_resources(spec)
     _print_lint(spec)
     _emit(render_input(spec), args.output)
     return 0
@@ -62,11 +88,12 @@ def cmd_ask(args) -> int:
     planned = plan_calculation(args.request, atoms, backend=backend)
     for note in planned.assumptions:
         print(f"[assumption] {note}", file=sys.stderr)
-    _print_lint(planned.spec)
+    spec = _auto_resources(planned.spec) if args.auto_resources else planned.spec
+    _print_lint(spec)
     if args.spec_out:
-        args.spec_out.write_text(planned.spec.model_dump_json(indent=2))
+        args.spec_out.write_text(spec.model_dump_json(indent=2))
         print(f"wrote {args.spec_out}", file=sys.stderr)
-    _emit(render_input(planned.spec), args.output)
+    _emit(render_input(spec), args.output)
     return 0
 
 
@@ -101,6 +128,8 @@ def build_parser() -> argparse.ArgumentParser:
     r = sub.add_parser("render", help="CalcSpec JSON -> .inp")
     r.add_argument("spec", type=Path)
     r.add_argument("-o", "--output", type=Path)
+    r.add_argument("--auto-resources", action="store_true",
+                   help="set nprocs/maxcore from this machine's cores and RAM")
     r.set_defaults(func=cmd_render)
 
     a = sub.add_parser("ask", help="plain-language request + .xyz -> .inp")
@@ -114,7 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--model", help="model name (for ollama see `ollama list`)")
     a.add_argument("--base-url", help="server URL for --backend openai")
     a.add_argument("--api-key-env", help="env var holding the API key for --backend openai")
+    a.add_argument("--auto-resources", action="store_true",
+                   help="set nprocs/maxcore from this machine's cores and RAM")
     a.set_defaults(func=cmd_ask)
+
+    rs = sub.add_parser("resources", help="show detected cores/RAM and suggested nprocs/maxcore")
+    rs.set_defaults(func=cmd_resources)
 
     x = sub.add_parser("run", help="run ORCA on an .inp, then parse the result")
     x.add_argument("input", type=Path)

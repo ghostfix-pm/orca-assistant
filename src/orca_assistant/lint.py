@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .resources import Hardware, suggest_resources
 from .spec import CalcSpec, Task
 
 
@@ -12,7 +13,39 @@ class Issue:
     message: str
 
 
-def lint(spec: CalcSpec) -> list[Issue]:
+def _gib(mb: int) -> str:
+    return f"{mb / 1024:.1f} GiB"
+
+
+def check_hardware(spec: CalcSpec, hw: Hardware) -> list[Issue]:
+    """Compare the requested nprocs x maxcore with the machine."""
+    issues: list[Issue] = []
+    r = spec.resources
+    need = r.nprocs * r.maxcore_mb
+    sug = suggest_resources(hw)
+    hint = f" Suggested for this machine: nprocs={sug.nprocs}, maxcore={sug.maxcore_mb}."
+
+    if hw.cores and r.nprocs > hw.cores:
+        issues.append(Issue("warning",
+            f"nprocs={r.nprocs} exceeds the {hw.cores} physical cores detected; "
+            "oversubscribing the CPU usually slows ORCA down." + hint))
+    if hw.ram_mb:
+        if need > hw.ram_mb:
+            issues.append(Issue("warning",
+                f"nprocs x maxcore = {r.nprocs} x {r.maxcore_mb} MB = {_gib(need)} "
+                f"exceeds the total RAM ({_gib(hw.ram_mb)}); the job will likely swap or be killed." + hint))
+        elif need > 0.75 * hw.ram_mb:
+            issues.append(Issue("warning",
+                f"nprocs x maxcore = {_gib(need)} is over 75% of the total RAM "
+                f"({_gib(hw.ram_mb)}); ORCA can exceed %maxcore, so leave headroom." + hint))
+        elif hw.available_mb and need > hw.available_mb:
+            issues.append(Issue("info",
+                f"nprocs x maxcore = {_gib(need)} is more than the RAM available right now "
+                f"({_gib(hw.available_mb)}); close other programs or lower maxcore." + hint))
+    return issues
+
+
+def lint(spec: CalcSpec, hardware: Hardware | None = None) -> list[Issue]:
     issues: list[Issue] = []
     m = spec.method
     name = m.functional.lower()
@@ -36,4 +69,6 @@ def lint(spec: CalcSpec) -> list[Issue]:
     if len(spec.molecule.atoms) > 60 and spec.resources.nprocs < 8:
         issues.append(Issue("info",
             "Large system with few cores; consider increasing nprocs."))
+    if hardware is not None:
+        issues.extend(check_hardware(spec, hardware))
     return issues
