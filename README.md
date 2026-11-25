@@ -84,3 +84,14 @@ E, ZPE, H and G in Eh, relative energies in kcal/mol and Boltzmann
 populations. Relative values use the Gibbs free energy when every file has it,
 otherwise the electronic energy (with a warning). Only compare calculations
 done at the same level of theory.
+
+## Watching a running job
+
+`orca-assistant watch job.out` follows the output of a running ORCA job:
+current stage (SCF, geometry optimisation, final single point), optimisation
+cycle, last energy, the geometry convergence table and the time per cycle. It
+exits when ORCA finishes (exit code 0) or fails (1); `--once` prints a single
+snapshot and `--plain` prints a new block only when the status changes (no
+screen clearing, easy to copy). No remaining-time estimate is given because
+the number of optimisation cycles is not known in advance. Tested live on a
+benzene optimisation + frequencies run with ORCA 6.1.1.

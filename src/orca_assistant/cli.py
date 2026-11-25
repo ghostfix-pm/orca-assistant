@@ -14,6 +14,7 @@ from .render import render_input
 from .resources import detect_hardware, suggest_resources
 from .spec import CalcSpec, atoms_from_xyz
 from .table import build_rows, render_table
+from .watch import watch
 
 
 def _print_lint(spec: CalcSpec) -> None:
@@ -129,6 +130,9 @@ def cmd_ask(args) -> int:
 
 
 def cmd_run(args) -> int:
+    if not args.input.exists():
+        print(f"input file not found: {args.input}", file=sys.stderr)
+        return 3
     orca = shutil.which("orca")
     if not orca:
         print("ORCA not found in PATH.", file=sys.stderr)
@@ -168,6 +172,15 @@ def cmd_table(args) -> int:
         print(f"[warning] {w}", file=sys.stderr)
     _emit(render_table(table, args.format), args.output)
     return 0
+
+
+def cmd_watch(args) -> int:
+    try:
+        return watch(args.file, interval=args.interval, once=args.once,
+                     tty=False if args.plain else None)
+    except KeyboardInterrupt:
+        print(file=sys.stderr)
+        return 0
 
 
 def cmd_parse(args) -> int:
@@ -232,6 +245,15 @@ def build_parser() -> argparse.ArgumentParser:
                         "auto = Gibbs when every file has it")
     t.add_argument("--sort", action="store_true", help="most populated first")
     t.set_defaults(func=cmd_table)
+
+    w = sub.add_parser("watch", help="live status of a running ORCA job from its .out file")
+    w.add_argument("file", type=Path)
+    w.add_argument("--interval", type=float, default=2.0, help="seconds between checks")
+    w.add_argument("--once", action="store_true", help="print the status once and exit")
+    w.add_argument("--plain", action="store_true",
+                   help="no screen clearing: print a new block only when the status changes "
+                        "(easy to copy)")
+    w.set_defaults(func=cmd_watch)
 
     pa = sub.add_parser("parse", help="summarise an ORCA .out file")
     pa.add_argument("output", type=Path)
